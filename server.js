@@ -29,9 +29,8 @@ app.use(
 );
 
 // ✅ Handle preflight for all routes properly
-app.options("*", cors());
+app.options(/.*/, cors()); // optional for preflight
 
- 
 // ✅ Serve uploads folder
 app.use("/uploads", express.static("uploads"));
 
