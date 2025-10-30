@@ -11,18 +11,18 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-const allowedOrigins = [
-  "https://vocal-biscochitos-67aba0.netlify.app",
-  "http://localhost:3000"
-];
+app.use(cors({
+  origin: [
+    "https://vocal-biscochitos-67aba0.netlify.app",
+    "http://localhost:3000"
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+}));
 
-app.use(
-  cors({
-    origin: allowedOrigins,
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true,
-  })
-);
+// ✅ Handle OPTIONS preflight for all routes
+app.options("*", cors());
 
 
 app.use("/uploads", express.static("uploads"));
