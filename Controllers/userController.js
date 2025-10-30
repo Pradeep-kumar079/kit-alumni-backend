@@ -4,11 +4,13 @@ const PostModel = require("../Models/PostModel");
 const BatchModel = require("../Models/BatchModel");
 const FeedBackModel = require("../Models/FeedBackform");
 const nodemailer = require("nodemailer");
+const SibApiV3Sdk = require("sib-api-v3-sdk");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
 
 // ==================== SEND OTP ==================== //
+
 const sendOtpController = async (req, res) => {
   try {
     const { email } = req.body;
@@ -17,7 +19,9 @@ const sendOtpController = async (req, res) => {
 
     const existingUser = await UserModel.findOne({ email });
     if (existingUser)
-      return res.status(400).json({ success: false, message: "User already registered with this email." });
+      return res
+        .status(400)
+        .json({ success: false, message: "User already registered with this email." });
 
     const otp = Math.floor(100000 + Math.random() * 900000);
 
@@ -27,22 +31,33 @@ const sendOtpController = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-    });
+    // ✅ Use Brevo (Sendinblue) API for sending OTP
+    const defaultClient = SibApiV3Sdk.ApiClient.instance;
+    const apiKey = defaultClient.authentications["api-key"];
+    apiKey.apiKey = process.env.BREVO_API_KEY;
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: "Your OTP for Alumni Registration",
-      text: `Your OTP is ${otp}. It is valid for 10 minutes.`,
+    const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+
+    const sender = {
+      email: "yourname@gmail.com", // ✅ Must be the verified Brevo sender email
+      name: "KIT Alumni",
+    };
+
+    const receivers = [{ email }];
+
+    await tranEmailApi.sendTransacEmail({
+      sender,
+      to: receivers,
+      subject: "Your OTP for KIT Alumni Registration",
+      textContent: `Your OTP is ${otp}. It is valid for 10 minutes.`,
     });
 
     res.status(200).json({ success: true, message: "OTP sent successfully!" });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: "Failed to send OTP", error: err.message });
+    console.error("❌ OTP Error:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to send OTP", error: err.message });
   }
 };
 
