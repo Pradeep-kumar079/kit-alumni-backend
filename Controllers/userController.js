@@ -19,48 +19,46 @@ if (!process.env.BREVO_API_KEY) {
 if (!process.env.SENDER_EMAIL) {
   console.warn("⚠️ SENDER_EMAIL is not set. OTP sender must be a verified Brevo sender.");
 }
-
-/* ===========================
-   SEND OTP
-   - Stores OTP in OtpModel (DB)
-   - Sends via Brevo (sib-api-v3-sdk)
-   =========================== */
 const sendOtpController = async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ success: false, message: "Email is required" });
+    if (!email)
+      return res
+        .status(400)
+        .json({ success: false, message: "Email is required" });
 
-    // prevent sending to already-registered emails (optional)
+    // Prevent sending OTP to already registered users
     const existingUser = await UserModel.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ success: false, message: "User already registered with this email." });
+      return res.status(400).json({
+        success: false,
+        message: "User already registered with this email.",
+      });
     }
 
-    // generate 6-digit OTP
+    // Generate random 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // save otp to DB with timestamp
+    // Save OTP to DB (replaces previous if exists)
     await OtpModel.findOneAndUpdate(
       { email },
       { otp, createdAt: new Date() },
       { upsert: true, new: true }
     );
 
-    // configure Brevo
+    // Configure Brevo API
     const defaultClient = SibApiV3Sdk.ApiClient.instance;
     const apiKey = defaultClient.authentications["api-key"];
     apiKey.apiKey = process.env.BREVO_API_KEY;
 
     const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
-
     const sender = {
-      email: process.env.SENDER_EMAIL, // MUST be verified in Brevo
+      email: process.env.SENDER_EMAIL, // Must be verified in Brevo
       name: "KIT Alumni",
     };
-
     const receivers = [{ email }];
 
-    // send the transactional email
+    // Send transactional email
     await tranEmailApi.sendTransacEmail({
       sender,
       to: receivers,
@@ -68,11 +66,15 @@ const sendOtpController = async (req, res) => {
       textContent: `Your OTP is ${otp}. It is valid for 10 minutes.`,
     });
 
-    console.log(`📨 OTP sent to ${email}`);
-    return res.status(200).json({ success: true, message: "OTP sent successfully" });
+    console.log(`📨 OTP sent to ${email} (${otp})`);
+    return res
+      .status(200)
+      .json({ success: true, message: "OTP sent successfully" });
   } catch (err) {
-    // Provide helpful logs for debugging; do not leak secrets to clients
-    console.error("❌ OTP Error:", err.response?.body || err.response || err.message || err);
+    console.error(
+      "❌ OTP Error:",
+      err.response?.body || err.response || err.message || err
+    );
     return res.status(500).json({
       success: false,
       message: "Failed to send OTP. Check server logs and Brevo configuration.",
@@ -80,7 +82,6 @@ const sendOtpController = async (req, res) => {
     });
   }
 };
-
 /* ===========================
    VERIFY OTP
    - Checks OtpModel, deletes on success
