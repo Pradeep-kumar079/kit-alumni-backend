@@ -14,12 +14,11 @@ app.use(express.json());
 
 // ✅ Allowed origins (put this BEFORE using it anywhere)
 const allowedOrigins = [
-    "https://vocal-biscochitos-67aba0.netlify.app",
+  "https://vocal-biscochitos-67aba0.netlify.app",
   "http://localhost:3000",
   "http://localhost:5001",
 ];
 
-// ✅ CORS middleware
 app.use(
   cors({
     origin: allowedOrigins,
@@ -28,8 +27,11 @@ app.use(
     credentials: true,
   })
 );
-app.options(/.*/, cors()); // optional for preflight
 
+// ✅ Handle preflight for all routes properly
+app.options("*", cors());
+
+ 
 // ✅ Serve uploads folder
 app.use("/uploads", express.static("uploads"));
 
