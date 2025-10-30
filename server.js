@@ -12,8 +12,8 @@ const app = express();
 app.use(express.json());
 
 const allowedOrigins = [
-  process.env.FRONTEND_URL, 
-  "http://localhost:3000",
+  "https://vocal-biscochitos-67aba0.netlify.app",
+  "http://localhost:3000"
 ];
 
 app.use(
@@ -23,6 +23,7 @@ app.use(
     credentials: true,
   })
 );
+
 
 app.use("/uploads", express.static("uploads"));
 
