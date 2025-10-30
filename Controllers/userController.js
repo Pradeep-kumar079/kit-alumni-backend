@@ -19,13 +19,13 @@ if (!process.env.BREVO_API_KEY) {
 if (!process.env.SENDER_EMAIL) {
   console.warn("⚠️ SENDER_EMAIL is not set. OTP sender must be a verified Brevo sender.");
 }
+
+
 const sendOtpController = async (req, res) => {
   try {
     const { email } = req.body;
     if (!email)
-      return res
-        .status(400)
-        .json({ success: false, message: "Email is required" });
+      return res.status(400).json({ success: false, message: "Email is required" });
 
     // Prevent sending OTP to already registered users
     const existingUser = await UserModel.findOne({ email });
@@ -36,29 +36,31 @@ const sendOtpController = async (req, res) => {
       });
     }
 
-    // Generate random 6-digit OTP
+    // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Save OTP to DB (replaces previous if exists)
+    // Save OTP to DB (upsert)
     await OtpModel.findOneAndUpdate(
       { email },
       { otp, createdAt: new Date() },
       { upsert: true, new: true }
     );
 
-    // Configure Brevo API
+    // ✅ Brevo email setup
+    const SibApiV3Sdk = require("sib-api-v3-sdk");
     const defaultClient = SibApiV3Sdk.ApiClient.instance;
     const apiKey = defaultClient.authentications["api-key"];
     apiKey.apiKey = process.env.BREVO_API_KEY;
 
     const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+
     const sender = {
-      email: process.env.EMAIL_USER, // Must be verified in Brevo
+      email: process.env.SENDER_EMAIL, // ✅ Must match verified Brevo sender
       name: "KIT Alumni",
     };
     const receivers = [{ email }];
 
-    // Send transactional email
+    // ✅ Send email
     await tranEmailApi.sendTransacEmail({
       sender,
       to: receivers,
@@ -67,21 +69,16 @@ const sendOtpController = async (req, res) => {
     });
 
     console.log(`📨 OTP sent to ${email} (${otp})`);
-    return res
-      .status(200)
-      .json({ success: true, message: "OTP sent successfully" });
+    return res.status(200).json({ success: true, message: "OTP sent successfully" });
   } catch (err) {
-    console.error(
-      "❌ OTP Error:",
-      err.response?.body || err.response || err.message || err
-    );
+    console.error("❌ OTP Error:", err.response?.body || err.message || err);
     return res.status(500).json({
       success: false,
-      message: "Failed to send OTP. Check server logs and Brevo configuration.",
-      error: err.message,
+      message: "Failed to send OTP. Check Brevo configuration and sender email.",
     });
   }
 };
+
 /* ===========================
    VERIFY OTP
    - Checks OtpModel, deletes on success
