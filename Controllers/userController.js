@@ -11,27 +11,42 @@ const axios = require("axios");
 
 // ==================== SEND OTP ==================== //
 
+
+// Helper: validate environment keys at startup (optional)
+if (!process.env.BREVO_API_KEY) {
+  console.warn("⚠️ BREVO_API_KEY is not set. OTP sending will fail until you set it.");
+}
+if (!process.env.SENDER_EMAIL) {
+  console.warn("⚠️ SENDER_EMAIL is not set. OTP sender must be a verified Brevo sender.");
+}
+
+/* ===========================
+   SEND OTP
+   - Stores OTP in OtpModel (DB)
+   - Sends via Brevo (sib-api-v3-sdk)
+   =========================== */
 const sendOtpController = async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email)
-      return res.status(400).json({ success: false, message: "Email is required" });
+    if (!email) return res.status(400).json({ success: false, message: "Email is required" });
 
+    // prevent sending to already-registered emails (optional)
     const existingUser = await UserModel.findOne({ email });
-    if (existingUser)
-      return res
-        .status(400)
-        .json({ success: false, message: "User already registered with this email." });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: "User already registered with this email." });
+    }
 
-    const otp = Math.floor(100000 + Math.random() * 900000);
+    // generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
+    // save otp to DB with timestamp
     await OtpModel.findOneAndUpdate(
       { email },
       { otp, createdAt: new Date() },
       { upsert: true, new: true }
     );
 
-    // ✅ Use Brevo (Sendinblue) API for sending OTP
+    // configure Brevo
     const defaultClient = SibApiV3Sdk.ApiClient.instance;
     const apiKey = defaultClient.authentications["api-key"];
     apiKey.apiKey = process.env.BREVO_API_KEY;
@@ -39,12 +54,13 @@ const sendOtpController = async (req, res) => {
     const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
     const sender = {
-      email: "yourname@gmail.com", // ✅ Must be the verified Brevo sender email
+      email: process.env.SENDER_EMAIL, // MUST be verified in Brevo
       name: "KIT Alumni",
     };
 
     const receivers = [{ email }];
 
+    // send the transactional email
     await tranEmailApi.sendTransacEmail({
       sender,
       to: receivers,
@@ -52,34 +68,50 @@ const sendOtpController = async (req, res) => {
       textContent: `Your OTP is ${otp}. It is valid for 10 minutes.`,
     });
 
-    res.status(200).json({ success: true, message: "OTP sent successfully!" });
+    console.log(`📨 OTP sent to ${email}`);
+    return res.status(200).json({ success: true, message: "OTP sent successfully" });
   } catch (err) {
-    console.error("❌ OTP Error:", err);
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to send OTP", error: err.message });
+    // Provide helpful logs for debugging; do not leak secrets to clients
+    console.error("❌ OTP Error:", err.response?.body || err.response || err.message || err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to send OTP. Check server logs and Brevo configuration.",
+      error: err.message,
+    });
   }
 };
 
-// ==================== VERIFY OTP ==================== //
+/* ===========================
+   VERIFY OTP
+   - Checks OtpModel, deletes on success
+   =========================== */
 const verifyOtpController = async (req, res) => {
   try {
     const { email, otp } = req.body;
-    if (!email || !otp)
-      return res.status(400).json({ success: false, message: "Email and OTP are required" });
+    if (!email || !otp) return res.status(400).json({ success: false, message: "Email and OTP required" });
 
     const record = await OtpModel.findOne({ email, otp });
-    if (!record)
-      return res.status(400).json({ success: false, message: "Invalid or expired OTP" });
+    if (!record) return res.status(400).json({ success: false, message: "Invalid or expired OTP" });
+
+    // optional: check expiry (10 min)
+    const tenMins = 10 * 60 * 1000;
+    if (new Date() - new Date(record.createdAt) > tenMins) {
+      await OtpModel.deleteOne({ email });
+      return res.status(400).json({ success: false, message: "OTP expired" });
+    }
 
     await OtpModel.deleteOne({ email });
-    res.status(200).json({ success: true, message: "OTP verified successfully" });
+    return res.status(200).json({ success: true, message: "OTP verified successfully" });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error("❌ Verify OTP Error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// ==================== REGISTER ==================== //
+/* ===========================
+   REGISTER
+   - Example register flow, hashes password
+   =========================== */
 const RegisterController = async (req, res) => {
   try {
     const {
@@ -91,30 +123,25 @@ const RegisterController = async (req, res) => {
       lateralEntry = false,
       mobileno,
       usn,
-      dob
+      dob,
     } = req.body;
-    const img = "../uploads/default.jpg";
 
-    if (!username || !email || !password || !branch || !admissionyear)
+    if (!username || !email || !password || !branch || !admissionyear) {
       return res.status(400).json({ success: false, message: "All fields are required" });
+    }
 
     const existingUser = await UserModel.findOne({ email });
-    if (existingUser)
-      return res.status(400).json({ success: false, message: "User already exists" });
+    if (existingUser) return res.status(400).json({ success: false, message: "User already exists" });
 
     const currentYear = new Date().getFullYear();
     const courseDuration = lateralEntry ? 3 : 4;
-
-    // Determine role
     const role = admissionyear + courseDuration <= currentYear ? "alumni" : "student";
-
-    // Determine real batch year for lateral entry
     const batchYear = lateralEntry ? admissionyear - 1 : admissionyear;
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = new UserModel({
-      userimg: img,
+      userimg: req.file ? req.file.path : "../uploads/default.jpg",
       username,
       email,
       password: hashedPassword,
@@ -129,58 +156,34 @@ const RegisterController = async (req, res) => {
     });
 
     const savedUser = await newUser.save();
-
-    // --- BATCH LOGIC --- //
-    let batch = await BatchModel.findOne({ admissionyear: batchYear });
-    if (!batch) {
-      batch = new BatchModel({
-        admissionyear: batchYear,
-        branches: [branch],
-        role: [savedUser._id],
-      });
-    } else {
-      if (!batch.branches.includes(branch)) batch.branches.push(branch);
-      if (!batch.role.includes(savedUser._id)) batch.role.push(savedUser._id);
-    }
-    await batch.save();
-
-    res.status(201).json({ success: true, message: "User registered successfully", user: savedUser });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(201).json({ success: true, message: "User registered successfully", user: savedUser });
+  } catch (err) {
+    console.error("❌ Register Error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// ==================== LOGIN ==================== //
+/* ===========================
+   LOGIN (example with USN or email)
+   =========================== */
 const LoginController = async (req, res) => {
   try {
-    const { usn, password } = req.body;
-    if (!usn || !password)
-      return res.status(400).json({ success: false, message: "All fields required" });
+    const { usn, email, password } = req.body;
+    let user;
+    if (usn) user = await UserModel.findOne({ usn: usn.toUpperCase() });
+    else if (email) user = await UserModel.findOne({ email });
+    else return res.status(400).json({ success: false, message: "Provide USN or email" });
 
-    const user = await UserModel.findOne({ usn: usn.toUpperCase() });
-    if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch)
-      return res.status(401).json({ success: false, message: "Invalid credentials" });
+    if (!isMatch) return res.status(401).json({ success: false, message: "Invalid credentials" });
 
-    const token = jwt.sign(
-      { id: user._id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
-    );
-
-    res.status(200).json({
-      success: true,
-      message: "Login successful",
-      token,
-      user,
-    });
-  } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "1d" });
+    return res.status(200).json({ success: true, message: "Login successful", token, user });
+  } catch (err) {
+    console.error("❌ Login Error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
