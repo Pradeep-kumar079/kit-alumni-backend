@@ -16,6 +16,7 @@ app.use(express.json());
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5001",
+  "https://alumni-backend-bz8e.onrender.com",
   "https://your-netlify-app.netlify.app"
 ];
 

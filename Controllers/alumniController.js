@@ -4,7 +4,7 @@ const Request = require("../Models/RequestModel");
 const UserModel = require("../Models/UserModel");
 
 // ✅ Local base URL for email links
-const BASE_URL = "http://localhost:5000";
+const BASE_URL = "https://alumni-backend-bz8e.onrender.com";
 
 /* ------------------------------------------------------------------
    ✅ Send Connection Request
