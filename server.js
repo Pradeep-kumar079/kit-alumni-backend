@@ -12,21 +12,28 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-// ✅ Allow localhost (frontend dev) + Netlify (deployment)
+// ✅ Allow localhost (for local dev) + Netlify (for deployment)
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5001",
-  "https://alumni-backend-bz8e.onrender.com",
-  "https://your-netlify-app.netlify.app"
+  "https://vocal-biscochitos-67aba0.netlify.app" // ✅ exact Netlify domain, no trailing slash
 ];
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.log("❌ Blocked by CORS:", origin);
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   })
 );
+
 
 // ✅ Serve uploads
 app.use("/uploads", express.static("uploads"));
