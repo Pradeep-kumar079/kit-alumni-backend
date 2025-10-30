@@ -12,7 +12,7 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-// ✅ Allowed origins (put this BEFORE using it anywhere)
+// ✅ Allowed origins
 const allowedOrigins = [
   "https://vocal-biscochitos-67aba0.netlify.app",
   "http://localhost:3000",
@@ -27,17 +27,14 @@ app.use(
     credentials: true,
   })
 );
+app.options(/.*/, cors());
 
-// ✅ Handle preflight for all routes properly
-app.options(/.*/, cors()); // optional for preflight
-
-// ✅ Serve uploads folder
+// ✅ Static uploads
 app.use("/uploads", express.static("uploads"));
 
 // ✅ MongoDB Connection
-const MONGO_URI = process.env.MONGO_URI;
 mongoose
-  .connect(MONGO_URI)
+  .connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB connected"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
@@ -51,7 +48,7 @@ app.use("/api/admin", require("./Routes/AdminRoutes"));
 app.use("/api/search", require("./Routes/SearchRoutes"));
 app.use("/api/auth", require("./Routes/ForgotRoutes"));
 
-// ✅ Health check
+// ✅ Health Check
 app.get("/", (req, res) => {
   res.send("✅ KIT Alumni backend is running fine");
 });
@@ -96,7 +93,6 @@ io.on("connection", (socket) => {
       if (receiverSocket) {
         io.to(receiverSocket).emit("receive-message", { chat: newChat });
       }
-
       socket.emit("message-sent", { chat: newChat });
     } catch (err) {
       console.error("Message error:", err);
@@ -124,6 +120,6 @@ io.on("connection", (socket) => {
   });
 });
 
-// ✅ Start server
+// ✅ Start Server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
