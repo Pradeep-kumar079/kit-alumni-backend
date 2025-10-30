@@ -22,7 +22,8 @@ app.use(cors({
 }));
 
 // ✅ Handle OPTIONS preflight for all routes
-app.options("*", cors());
+app.options(/.*/, cors());
+
 
 
 app.use("/uploads", express.static("uploads"));
