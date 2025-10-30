@@ -53,7 +53,7 @@ const sendOtpController = async (req, res) => {
 
     const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
     const sender = {
-      email: process.env.SENDER_EMAIL, // Must be verified in Brevo
+      email: process.env.EMAIL_USER, // Must be verified in Brevo
       name: "KIT Alumni",
     };
     const receivers = [{ email }];
