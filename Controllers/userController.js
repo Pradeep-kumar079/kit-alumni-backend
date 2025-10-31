@@ -8,7 +8,8 @@ const SibApiV3Sdk = require("sib-api-v3-sdk");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
-
+const nodemailer = require("nodemailer");
+const crypto = require("crypto");
 // ==================== SEND OTP ==================== //
 
 
@@ -19,37 +20,29 @@ if (!process.env.BREVO_API_KEY) {
 if (!process.env.SENDER_EMAIL) {
   console.warn("⚠️ SENDER_EMAIL is not set. OTP sender must be a verified Brevo sender.");
 }
-
-const sendOtpController = async (req, res) => {
+exports.sendOtpController = async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email)
-      return res.status(400).json({ success: false, message: "Email is required" });
 
-    // Check if already registered
-    const existingUser = await UserModel.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "User already registered with this email.",
-      });
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required" });
     }
 
-    // Generate OTP
+    // ✅ Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Save or update OTP
-    await OtpModel.findOneAndUpdate(
+    // ✅ Store OTP in DB (hashed or plain for testing)
+    await OTPModel.findOneAndUpdate(
       { email },
-      { otp, createdAt: new Date() },
+      { otp, createdAt: Date.now() },
       { upsert: true, new: true }
     );
 
-    // ✅ Setup Brevo SMTP transport
+    // ✅ Setup Gmail SMTP transporter
     const transporter = nodemailer.createTransport({
-      host: process.env.BREVO_HOST || "smtp-relay.brevo.com",
-      port: process.env.BREVO_PORT || 587,
-      secure: false,
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      secure: false, // TLS
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
@@ -57,21 +50,21 @@ const sendOtpController = async (req, res) => {
     });
 
     // ✅ Send mail
-    await transporter.sendMail({
+    const mailOptions = {
       from: `"KIT Alumni" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "Your OTP for KIT Alumni Registration",
       text: `Your OTP is ${otp}. It is valid for 10 minutes.`,
-    });
+    };
 
-    console.log(`📨 OTP sent to ${email}: ${otp}`);
-    return res.status(200).json({ success: true, message: "OTP sent successfully" });
+    await transporter.sendMail(mailOptions);
+
+    console.log(`✅ OTP sent successfully to ${email}`);
+    res.json({ success: true, message: "OTP sent successfully" });
+
   } catch (err) {
     console.error("❌ OTP Error:", err.message);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to send OTP. Check SMTP credentials and Brevo configuration.",
-    });
+    res.status(500).json({ success: false, message: `Failed to send OTP: ${err.message}` });
   }
 };
 /* ===========================
