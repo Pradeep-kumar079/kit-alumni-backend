@@ -8,7 +8,6 @@ const SibApiV3Sdk = require("sib-api-v3-sdk");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
-const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 // ==================== SEND OTP ==================== //
 
