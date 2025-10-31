@@ -19,7 +19,7 @@ if (!process.env.BREVO_API_KEY) {
 if (!process.env.SENDER_EMAIL) {
   console.warn("⚠️ SENDER_EMAIL is not set. OTP sender must be a verified Brevo sender.");
 }
-exports.sendOtpController = async (req, res) => {
+const sendOtpController = async (req, res) => {
   try {
     const { email } = req.body;
 
