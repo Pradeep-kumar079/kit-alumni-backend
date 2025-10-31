@@ -19,6 +19,10 @@ if (!process.env.BREVO_API_KEY) {
 if (!process.env.SENDER_EMAIL) {
   console.warn("⚠️ SENDER_EMAIL is not set. OTP sender must be a verified Brevo sender.");
 }
+// ==================== SEND OTP ==================== //
+// const nodemailer = require("nodemailer");
+// const OtpModel = require("../Models/OtpModel");
+
 const sendOtpController = async (req, res) => {
   try {
     const { email } = req.body;
@@ -28,44 +32,49 @@ const sendOtpController = async (req, res) => {
     }
 
     // ✅ Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otp = Math.floor(100000 + Math.random() * 900000);
 
-    // ✅ Store OTP in DB (hashed or plain for testing)
-    await OTPModel.findOneAndUpdate(
+    // ✅ Save or update OTP (case fixed!)
+    await OtpModel.findOneAndUpdate(
       { email },
       { otp, createdAt: Date.now() },
       { upsert: true, new: true }
     );
 
-    // ✅ Setup Gmail SMTP transporter
+    // ✅ Configure mailer
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT,
-      secure: false, // TLS
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: process.env.SMTP_PORT || 587,
+      secure: false,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
     });
 
-    // ✅ Send mail
+    // ✅ Mail content
     const mailOptions = {
       from: `"KIT Alumni" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: "Your OTP for KIT Alumni Registration",
-      text: `Your OTP is ${otp}. It is valid for 10 minutes.`,
+      subject: "Your KIT Alumni OTP Code",
+      text: `Your one-time password (OTP) is ${otp}. It will expire in 10 minutes.`,
     };
 
+    // ✅ Send email
     await transporter.sendMail(mailOptions);
+    console.log(`✅ OTP sent to ${email}`);
 
-    console.log(`✅ OTP sent successfully to ${email}`);
     res.json({ success: true, message: "OTP sent successfully" });
-
-  } catch (err) {
-    console.error("❌ OTP Error:", err.message);
-    res.status(500).json({ success: false, message: `Failed to send OTP: ${err.message}` });
+  } catch (error) {
+    console.error("❌ Error sending OTP:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to send OTP",
+      error: error.message,
+    });
   }
 };
+
 /* ===========================
    VERIFY OTP
    - Checks OtpModel, deletes on success
